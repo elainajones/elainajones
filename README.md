@@ -1,16 +1,31 @@
-### Hi there 👋
+# About me
 
-<!--
-**elainajones/elainajones** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+I'm an iconic Gentoo linux user and vim snob. I take my notes in markdown and git is my bestie. I'm a casual nerd, what can I say.
 
-Here are some ideas to get you started:
+Owner of [elainajones-upstreams](https://github.com/elainajones-upstreams) for projects I manage.
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+
+## What can I find here?
+
+### Academic
+
+- [https://github.com/elainajones-upstreams/project-euler-solutions](https://github.com/elainajones-upstreams/project-euler-solutions)
+- [https://github.com/elainajones/elainajones](https://github.com/elainajones/elainajones)
+
+### Collab 
+
+- [https://github.com/elainajones-upstreams/2024-pigs-ggj](https://github.com/elainajones-upstreams/2024-pigs-ggj)
+
+
+### Configs and meta-programming
+
+- [https://github.com/elainajones/bash_bin](https://github.com/elainajones/bash_bin)
+- [https://github.com/elainajones/xfce4_dotfiles](https://github.com/elainajones/xfce4_dotfiles)
+
+
+### Forks
+
+- [https://github.com/elainajones/qmk_firmware](https://github.com/elainajones/qmk_firmware)
+- [https://github.com/elainajones/numix-gtk-theme](https://github.com/elainajones/numix-gtk-theme)
+- [https://github.com/elainajones/Newaita](https://github.com/elainajones/Newaita)
+
