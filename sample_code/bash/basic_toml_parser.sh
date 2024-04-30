@@ -29,24 +29,27 @@ parse_toml() {
     declare config_path=$1;
     declare -gA CONFIG=();
     # Filter out comments so they aren't interpreted.
-    declare lines="$(grep -oP ^"[^#].+" $config_path)";
+    declare lines="$(grep -oP "^[^#].+" $config_path)";
     # Match everything between `[` and `]` as table headers.
     declare headers=($(grep -oP "(?<=^\[)\S+?(?=\])" $config_path));
     for i in $(seq ${#headers[@]}); do
-        h=${headers[$((i-1))]};
-        next=${headers[$i]};
+        h="${headers[$((i-1))]}";
+        next="${headers[$i]}";
         # Use headers to match individual tables.
         #declare table=$(echo $lines | grep -oP "\[$h(\n|.)+?(?=(\[|\Z))");
         if [[ "$next" ]]; then
-            declare table="$(echo $lines | \
+            declare table="$(echo "$lines" | \
+                tr "\n" " " | \
                 grep -oP "\[$h(\n|.)+?(?=(\[$next|\Z))")";
         else
-            declare table="$(echo $lines | \
+            declare table="$(echo "$lines" | \
+                tr "\n" " " | \
                 grep -oP "\[$h(\n|.)+?(?=(\Z))")";
         fi
         # Match strings on the left of `=` sign as variables.
         declare keys=($(\
-            echo $table | \
+            echo "$table" | \
+            tr "\n" " " | \
             grep -oP "\S+\s?(?==)" | \
             grep -oP "\S.*" | grep -oP ".*\S" \
         ));
@@ -60,7 +63,8 @@ parse_toml() {
             # 3. Remove leading/trailing whitespace.
 	        # 4. Remove quotes from strings conditionally.
             declare val="$(\
-                echo $table | \
+                echo "$table" | \
+                tr "\n" " " | \
                 grep -oP "(?<=${key})\s?=.+?(?=${keys[$i]}(\s?=|\Z))" | \
                 grep -oP "(?<==).+" | \
                 grep -oP "\S.*" | grep -oP ".*\S" | \
