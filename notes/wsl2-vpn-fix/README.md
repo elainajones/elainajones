@@ -54,16 +54,20 @@ properly as an action in Task Scheduler.
 1. From the Windows Start menu, open Task Scheduler.  
    ![](img/task-scheduler-0.png)
 2. From the right pane, click "Create Task".
-3. General
-    - Set Name (eg "WslVpnFix").
-    - Add description (eg "Configure network for WSL2").
+3. General.  
+   ![](img/task-scheduler-general-0.png)
+    - Set Name (eg "wsl_vpn_fix").
+    - Add description (eg "Configure network for WSL2 when connecting to a 
+      VPN").
     - Set user account to run as.
     - Select "Run only when user is logged on".
     - Select "Run with highest privileges".
-4. Triggers
+    - Leave all other settings as default.
+4. Triggers.  
+   ![](img/task-scheduler-triggers-0.png)
     - Next to Begin the task, select "On an event" from the drop-down.
     - Select "Custom" and click "Edit Event Filter"
-    - Enter the following as XML:
+    - Select "Edit query manually" and enter the following as XML:
       ```xml
       <QueryList>
         <Query Id="0" Path="System">
@@ -72,16 +76,21 @@ properly as an action in Task Scheduler.
       </QueryList>
       ```
     - Leave all other settings as default.
-5. Actions
+5. Actions.  
+   ![](img/task-scheduler-actions-0.png)
     - Click New and select "Start a Program" from the Action drop-down.
     - Browse to the exe file from the previous section to use as the 
       program/script to run.
-6. Conditions
+6. Conditions.  
+   ![](img/task-scheduler-conditions-0.png)
     - Click "Start only if the following network condition is available" and 
       select "Any connection".
-7. Settings
+    - Uncheck all other unrelated actions.
+7. Settings.  
+   ![](img/task-scheduler-settings-0.png)
     - Select "Allow task to be run on demand".
     - Select "Run task as soon as possible after a scheduled start is missed".
+    - Leave all other settings as default or unchecked.
 
 Once complete, the network routing for WSL2 will be automatically updated for 
 any new VPN connections.
