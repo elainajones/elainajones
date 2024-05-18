@@ -5,12 +5,16 @@
 Steps to resolve network issues for WSL2 when connected to some corporate 
 VPNs.
 
+**Keep in mind that network issues may persist if proxy configurations have 
+not been added. Refer to internal resources for guidance (as applicable).**
+
 
 ## Contents
 
 - [Usage](#usage)
     - [Converting ps1 to exe](#converting-ps1-to-exe)
     - [Adding a scheduled task](#adding-a-scheduled-task)
+- [Troubleshooting](#troubleshooting)
 
 
 ## Usage
@@ -96,4 +100,24 @@ properly as an action in Task Scheduler.
 
 Once complete, the network routing for WSL2 will be automatically updated for 
 any new VPN connections.
+
+
+## Troubleshooting
+
+- Verify the device is connected to the internet and other applications 
+  function as intended.
+- Verify that a VPN connection is established and other applications function 
+  as intended.
+- With the VPN disabled, verify basic network functionality. Run both of the 
+  following commands to verify proxy configurations as applicable. If setting 
+  a proxy resolves connectivitiy, additional proxy configurations may be 
+  needed.
+    - Without proxy: `curl --noproxy "*" www.google.com`
+    - With proxy: `curl --proxy "<address>:<port>" www.google.com`
+- Verify WSL network connectivity after stopping and restarting.
+  ```ps1
+  wsl --shutdown
+  ```
+- Verify task is present and enabled in Task Scheduler.
+- Check Task Scheduler logs for your task.
 
