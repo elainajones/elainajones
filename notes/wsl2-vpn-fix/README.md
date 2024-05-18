@@ -70,11 +70,13 @@ properly as an action in Task Scheduler.
     - Select "Edit query manually" and enter the following as XML:
       ```xml
       <QueryList>
-        <Query Id="0" Path="System">
-          <Select Path="System">*[System[Provider[@Name='Microsoft-Windows-Hyper-V-VmSwitch'] and (EventID=102)]]</Select>
-        </Query>
+      <Query Id="0" Path="System">
+      <Select Path="System">*[System[Provider[@Name='Microsoft-Windows-Hyper-V-VmSwitch'] and (EventID=102)]]</Select>
+      </Query>
       </QueryList>
       ```
+    - **Important: Close and re-open the event filter to make sure the XML 
+      saved properly**
     - Leave all other settings as default.
 5. Actions.  
    ![](img/task-scheduler-actions-0.png)
