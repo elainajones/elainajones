@@ -37,15 +37,10 @@ parse_toml() {
         next="${headers[$i]}";
         # Use headers to match individual tables.
         #declare table=$(echo $lines | grep -oP "\[$h(\n|.)+?(?=(\[|\Z))");
-        if [[ "$next" ]]; then
-            declare table="$(echo "$lines" | \
-                tr "\n" " " | \
-                grep -oP "\[$h(\n|.)+?(?=(\[$next|\Z))")";
-        else
-            declare table="$(echo "$lines" | \
-                tr "\n" " " | \
-                grep -oP "\[$h(\n|.)+?(?=(\Z))")";
-        fi
+        declare table="$(echo "$lines" | \
+            tr "\n" " " | \
+            grep -oP "\[$h\].+?(?=(\[$next\]|\Z))" \
+        )";
         # Match strings on the left of `=` sign as variables.
         declare keys=($(\
             echo "$table" | \
