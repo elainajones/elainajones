@@ -5,8 +5,8 @@ make_toml() {
 
     ! [[ -f $config_path ]] || rm $config_path;
 
-    # Config lines used for making and validating a user modified 
-    # config file to set script behavior. 
+    # Config lines used for making and validating a user modified
+    # config file to set script behavior.
     #
     # Note: Values are prefilled for demonstration purposes.
     declare config_lines=(\
@@ -14,11 +14,11 @@ make_toml() {
         "color = \"red\"" \
         "number = 23" \
         "" \
-        "[test]"
+        "[\"test\"]"
         "bool = true" \
         "string = \"[\"foo #!%#s xyz]\"" \
     );
-        
+
     for i in ${!config_lines[@]}; do
         declare line=${config_lines[$i]};
         echo "${line}" >> $config_file;
@@ -48,11 +48,11 @@ parse_toml() {
             grep -oP "\S+\s?(?==)" | \
             grep -oP "\S.*" | grep -oP ".*\S" \
         ));
-        # Iterate through table string, matching everything between 
+        # Iterate through table string, matching everything between
         # key and following key as key value.
         for i in $(seq 1 ${#keys[@]}); do
             declare key="${keys[$((i-1))]}";
-            # 1. Use variable keys to match everything up to the next 
+            # 1. Use variable keys to match everything up to the next
             #    variable key as the variable value.
             # 2. Match everything to the right of the `=` sign.
             # 3. Remove leading/trailing whitespace.
@@ -66,6 +66,10 @@ parse_toml() {
                 grep -oP "(?<=\"|\'|\b).+(?=\"|\'|\b)" \
             )";
 
+            # Remove quotes from header names.
+            # Due to limitations of data types in bash (of which this script)
+            # is already exploiting, all tablenames are strings anyway.
+            h="$(echo "$h" | tr -d "\"\'")"
             if ! [[ "$val" ]]; then
                 # Don't save undefined variables.
                 continue;
