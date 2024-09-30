@@ -1,31 +1,33 @@
 # About me
 
-I'm an iconic Gentoo linux user and vim snob. I take my notes in markdown and git is my bestie. I'm a casual nerd, what can I say.
+Hi there! I'm a IT professional, Linux enthusiast, and creative problem solver with a passion for helping others. I love finding elegant solutions to problems.
+
+Vim is the best text editor.
 
 Owner of [elainajones-upstreams](https://github.com/elainajones-upstreams) for projects I manage.
 
+## My projects at a glance
 
-## What can I find here?
+### Code samples, configs and references
 
-### Academic
+- [elainajones](https://github.com/elainajones/elainajones)
+    - General purpose reference code and notes.
+- [xfce4_dotfiles](https://github.com/elainajones/xfce4_dotfiles)
+    - Configs for my Linux installs.
+- [linux_home](https://github.com/elainajones/linux_home)
+    - Configs for my Linux installs (desktop environment).
 
-- [https://github.com/elainajones-upstreams/project-euler-solutions](https://github.com/elainajones-upstreams/project-euler-solutions)
-- [https://github.com/elainajones/elainajones](https://github.com/elainajones/elainajones)
+### Projects
 
-### Collab 
+- [remarkable-calendar](https://github.com/elainajones/remarkable-calendar)
+    - Custom PDF Calendar creator for the ReMarkable 2 e-notebook.
+- [project-euler-solutions](https://github.com/elainajones/project-euler-solutions)
+    - Code practice problems.
+- [Portland Indie Game Squad Global Game Jam 2024](https://github.com/elainajones-upstreams/2024-pigs-ggj)
+    - Game Jam game.
 
-- [https://github.com/elainajones-upstreams/2024-pigs-ggj](https://github.com/elainajones-upstreams/2024-pigs-ggj)
+### Libraries I use
 
-
-### Configs and meta-programming
-
-- [https://github.com/elainajones/bash_bin](https://github.com/elainajones/bash_bin)
-- [https://github.com/elainajones/xfce4_dotfiles](https://github.com/elainajones/xfce4_dotfiles)
-
-
-### Forks
-
-- [https://github.com/elainajones/qmk_firmware](https://github.com/elainajones/qmk_firmware)
-- [https://github.com/elainajones/numix-gtk-theme](https://github.com/elainajones/numix-gtk-theme)
-- [https://github.com/elainajones/Newaita](https://github.com/elainajones/Newaita)
+- [qmk_firmware](https://github.com/elainajones/qmk_firmware)
+    - Custom firmware for my trackball mouse.
 
