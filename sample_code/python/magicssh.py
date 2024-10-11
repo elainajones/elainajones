@@ -2,31 +2,31 @@ import time
 
 import sshtunnel
 import paramiko
-from fabric import Connection
+from fabric import Connection, Config
 
 
 class MagicSSH:
     """SSH client using Fabric
 
-    Convienient wrapper for SSH that extends functions from Fabric's
+    Convenient wrapper for SSH that extends functions from Fabric's
     low level Paramiko client object. These methods facilitate usage
     of interactive SSH channels.
 
     Fabric executes individual run commands in new shells, garbage
     collecting them between invocation. Alternatively, the send() and
     recv() functions use interactive channels that allow for sequential
-    command exectution within the same SSH session.
+    command execution within the same SSH session.
 
     Fabric is the recommended tool for common client use-cases such as
     running remote shell commands or transferring files. Please refer
-    to Fabric methods for more infomation.
+    to Fabric methods for more information.
 
     https://www.fabfile.org/
 
     Attributes:
         client: Fabric ssh connection object.
         channel: Paramiko ssh socket for sending/receiving ssh commands.
-        tunnel: SSH tunnel for forwarding local connections..
+        tunnels: SSH tunnel for forwarding local connections.
     """
     def __init__(
         self,
@@ -50,6 +50,8 @@ class MagicSSH:
         # Disable annoying debug output.
         paramiko.util.logging.disable(level='DEBUG')
 
+        self.__config = Config()
+
         self.__host = host
         self.__user = user
         self.__port = port
@@ -58,9 +60,12 @@ class MagicSSH:
 
         self.client = None
         self.channel = None
-        self.tunnel = None
+        self.tunnels = []
 
         if password:
+            self.__config = Config(
+                overrides={'sudo': {'password': self.__password}}
+            )
             self.client = Connection(
                 host=host,
                 user=user,
@@ -68,6 +73,7 @@ class MagicSSH:
                 connect_kwargs={
                     "password": password,
                 },
+                config=self.__config,
             )
         elif pkey:
             self.client = Connection(
@@ -78,6 +84,7 @@ class MagicSSH:
                     "key_filename": pkey,
                     "look_for_keys": False,
                 },
+                config=self.__config,
             )
 
         self.__connect()
@@ -120,7 +127,7 @@ class MagicSSH:
         Args:
             nbytes: Number of bytes to receive from the channel.
             timeout: Number of seconds to block for channel to receive
-                data. If None, channel is nonblocking.
+                data. If None, channel is non-blocking.
         """
         res = None
         if not self.channel:
@@ -134,14 +141,14 @@ class MagicSSH:
 
         return res
 
-    def recv_all(self, timeout: float, interval: float = 0.25) -> bytes:
-        """Recieves data from the SSH channel until timeout.
+    def recv_all(self, timeout: float = 15, interval: float = 0.25) -> bytes:
+        """Receives data from the SSH channel until timeout.
 
         Intended only for situations where run() is not applicable,
         such as interactive sessions.
 
-        If no more data is recvieved after consecutive attempts,
-        assume all data has been recieved. This is often useful
+        If no more data is received after consecutive attempts,
+        assume all data has been received. This is often useful
         when reading command output without knowing the exact length,
         including when output is intermittent.
 
@@ -181,15 +188,15 @@ class MagicSSH:
         If any SFTP are open, they will also be closed.
         """
         self.client.close()
-        self.tunnel and self.tunnel.close()
-        self.tunnel = None
+        self.tunnels and [i.close() for i in self.tunnels]
+        self.tunnels = []
 
     def put(self, local: str, remote: str = None) -> None:
-        """Put a local file (or file-like object) to the remote filesystem.
+        """Put a local file (or file-like object) to the remote file system.
 
         Args:
             local: File path or file-like object.
-            remote: Desination path. This will use the OS user's home if None.
+            remote: Destination path. This will use the OS user's home if None.
         """
         self.client.put(local=local, remote=remote)
 
@@ -208,7 +215,7 @@ class MagicSSH:
 
         Fabric uses a setting in the SSH layer which merges both
         stderr and stdout streams at a low level to cause output to
-        appear more naturally at the cost of an empty .stderr attribute.
+        appear more naturally at the cost of an empty stderr attribute.
 
         https://docs.fabfile.org/en/1.11/usage/interactivity.html
 
@@ -219,6 +226,21 @@ class MagicSSH:
             Tuple of output and return code.
         """
         result = self.client.run(cmd, hide=True)
+
+        return result.stdout, result.return_code
+
+    def sudo(self, cmd: str) -> tuple:
+        """Execute a shell command, via ``sudo``, on the remote end.
+
+        Simple wrapper for fabric.Connection.sudo()
+
+        Args:
+            cmd: Command to execute.
+
+        Returns:
+            Tuple of output and return code.
+        """
+        result = self.client.sudo(cmd, hide=True)
 
         return result.stdout, result.return_code
 
@@ -243,7 +265,7 @@ class MagicSSH:
         Args:
             local_port: Local port to forward.
             remote_port: Remote port to bind to.
-            remote_host: Remote server ip address.
+            remote_host: Remote server IP address.
             local_host: Local hostname to listen.
 
         Returns:
@@ -252,20 +274,24 @@ class MagicSSH:
         """
         try:
             # Close any existing tunnels.
-            self.tunnel and self.tunnel.close()
-            self.tunnel = sshtunnel.open_tunnel(
-                (self.__host, self.__port),
-                ssh_username=self.__user,
-                ssh_password=self.__password,
-                remote_bind_address=(remote_host, remote_port),
-                local_bind_address=(local_host, local_port)
+            self.tunnels.append(
+                sshtunnel.open_tunnel(
+                    (self.__host, self.__port),
+                    ssh_username=self.__user,
+                    ssh_password=self.__password,
+                    remote_bind_address=(remote_host, remote_port),
+                    local_bind_address=(local_host, local_port)
+                )
             )
-            self.tunnel.logger.disabled = True
-            self.tunnel.start()
-        except sshtunnel.HandlerSSHTunnelForwarderError:
-            pass
+            self.tunnels[-1].logger.disabled = True
+            self.tunnels[-1].start()
 
-    def tunnel_is_up(self) -> bool:
+            return len(self.tunnels) - 1
+
+        except sshtunnel.HandlerSSHTunnelForwarderError:
+            return None
+
+    def tunnel_is_up(self, index=-1) -> bool:
         """Check if forwarded SSH connection is up.
 
         Returns:
@@ -273,12 +299,12 @@ class MagicSSH:
                 is up.
 
         """
-        if not self.tunnel:
+        if not self.tunnels:
             status = False
         else:
-            self.tunnel.check_tunnels()
-            status = self.tunnel.tunnel_is_up.get(
-                self.tunnel.local_bind_address, False
+            self.tunnels[index].check_tunnels()
+            status = self.tunnels[index].tunnel_is_up.get(
+                self.tunnels[index].local_bind_address, False
             )
 
         return status
