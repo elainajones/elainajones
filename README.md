@@ -1,6 +1,6 @@
 # About me
 
-Hi there! I'm a IT professional, Linux enthusiast, and creative problem solver with a passion for helping others. I love finding elegant solutions to problems.
+Hi there! I'm a IT professional, Linux enthusiast, and creative problem solver with a passion for helping others.
 
 Vim is the best text editor.
 
@@ -13,9 +13,9 @@ Owner of [elainajones-upstreams](https://github.com/elainajones-upstreams) for p
 - [elainajones](https://github.com/elainajones/elainajones)
     - General purpose reference code and notes.
 - [xfce4_dotfiles](https://github.com/elainajones/xfce4_dotfiles)
-    - Configs for my Linux installs.
+    - Configs for my Linux installs (gui).
 - [linux_home](https://github.com/elainajones/linux_home)
-    - Configs for my Linux installs (desktop environment).
+    - Configs for my Linux installs (cli).
 
 ### Projects
 
