@@ -16,6 +16,8 @@ Owner of [elainajones-upstreams](https://github.com/elainajones-upstreams) for p
     - Configs for my Linux installs (gui).
 - [linux_home](https://github.com/elainajones/linux_home)
     - Configs for my Linux installs (cli).
+- [windows_home](https://github.com/elainajones/windows_home)
+    - Configs for my Windows installs (cli).
 
 ### Projects
 
