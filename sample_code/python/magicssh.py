@@ -1,8 +1,10 @@
+import posixpath
+import stat
 import time
-
-import sshtunnel
-import paramiko
 from fabric import Connection, Config
+from invoke.exceptions import UnexpectedExit
+import paramiko
+import sshtunnel
 
 
 class MagicSSH:
@@ -39,7 +41,7 @@ class MagicSSH:
         """Initializes the SSH client connection.
 
         Args:
-            host: Host ip address.
+            host: Host IP address.
             user: Host user name.
             port: SSH port number.
             password: SSH password for client authentication,
@@ -122,7 +124,7 @@ class MagicSSH:
         self.channel.send(s)
 
     def recv(self, nbytes: int = 1024) -> bytes:
-        """Recieve data from the SSH channel.
+        """Receive data from the SSH channel.
 
         Args:
             nbytes: Number of bytes to receive from the channel.
@@ -225,9 +227,35 @@ class MagicSSH:
         Returns:
             Tuple of output and return code.
         """
-        result = self.client.run(cmd, hide=True)
+        try:
+            result = self.client.run(cmd, hide=True)
+            result = (result.stdout, result.return_code)
+        except UnexpectedExit as e:
+            # Simple hack to preserve the expected behavior when an
+            # UnexpectedExit occurs. This can occur when the command
+            # fails on the remote host. For simple remote execution use
+            # cases, these errors should be combined in `.stdout` and
+            # the error reflected by the return code. Unfortunately,
+            # this behavior isn't well supported and the result object
+            # returns separate stderr and stdout attributes for this.
+            #
+            # With `pty=true`, the combined output is preserved but
+            # `.return_code` may incorrectly reflect a 0 status and
+            # `.ok` incorrectly reports True. With `warn=True` this
+            # corrects `.return_code` and `.ok` but still splits the
+            # stdout and stderr. Although more ideal, this is harder
+            # to handle predictably than a catch for this specific
+            # exception.
+            result = e.result
+            # Combine stderr and stdout.
+            output = result.stdout + result.stderr
+            # Make sure return code is non-zero so we can depend on it for
+            # determining errors. In theory, this can still be more verbose
+            # than a simple `.ok` which is why we don't use that instead.
+            return_code = result.return_code != 0 and result.return_code or 1
+            result = (output, return_code)
 
-        return result.stdout, result.return_code
+        return result
 
     def sudo(self, cmd: str) -> tuple:
         """Execute a shell command, via ``sudo``, on the remote end.
@@ -254,7 +282,7 @@ class MagicSSH:
         """Opens a tunnel connecting local_port to the remote_host.
 
         Handles tunnel creation and start. To check tunnel connection
-        status, the following attribures may be evaluated:
+        status, the following attributes may be evaluated:
 
         - self.tunnel.is_alive
         - self.tunnel.is_active
@@ -308,3 +336,58 @@ class MagicSSH:
             )
 
         return status
+
+    def sftp_walk(self, path: str) -> tuple:
+        """Walks through directories and files on an SFTP server.
+
+        This method behaves similarly to os.walk(), but for SFTP.
+        It yields a tuple containing the directory path, a list
+        of subdirectories, and a list of files.
+
+        Args:
+            path (str): The remote directory path to walk.
+
+        Yields:
+            tuple: A tuple containing the directory path (str),
+            a list of subdirectories (list of str), and a
+            list of files (list of str).
+
+        Example:
+            ssh = MagicSSH(...)
+            for dirpath, dirnames, filenames in ssh.sftp_walk(path):
+                # etc
+        """
+        dirs = []
+        files = []
+
+        sftp = self.client.sftp()
+
+        for i in sftp.listdir_attr(path):
+            if stat.S_ISDIR(i.st_mode):
+                dirs.append(i.filename)
+            else:
+                files.append(i.filename)
+
+        yield path, dirs, files
+
+        for d in dirs:
+            for i in self.sftp_walk(
+                posixpath.join(path, d)
+            ):
+                yield i
+
+    def sftp_file_exists(self, remote_path: str) -> bool:
+        """Check if a file exists on the remote system using SFTP.
+
+        Args:
+            remote_path: Path to the file on the remote system.
+
+        Returns:
+            True if the file exists, False otherwise.
+        """
+        try:
+            sftp = self.client.sftp()
+            sftp.stat(remote_path)
+            return True
+        except FileNotFoundError:
+            return False
