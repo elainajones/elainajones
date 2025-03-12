@@ -1,9 +1,13 @@
 import os
 import time
 import json
+import re
+import urllib3
 
-import redfish
 import requests
+from requests.models import Response
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 
 class RedFish:
@@ -21,36 +25,57 @@ class RedFish:
         hostname: str,
         username: str,
         password: str,
+        port=443,
     ) -> None:
         """Initializes the Redfish client connection.
 
         Args:
-            hostname: Redfish host ip address (i.e. BMC).
+            hostname: Redfish host IP address (i.e. BMC).
             username: Redfish user (i.e. BMC).
             password: Redfish password (i.e. BMC).
         """
+
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         # Store values for later so we can reconnect automatically if needed.
         self.__hostname = hostname
         self.__username = username
         self.__password = password
+        self.__port = port
 
         self.prefix = '/redfish/v1'
+        self.base_url = f'https://{self.__hostname}:{self.__port}'
+
         self.__auth()
 
     def __auth(self) -> None:
         """Establishes client Redfish connection.
 
         """
-        self.client = redfish.redfish_client(
-            base_url=f'https://{self.__hostname}',
-            username=self.__username,
-            password=self.__password,
-            default_prefix=self.prefix
-        )
-        self.client.login(auth='session')
+        self.client = requests.Session()
+        self.client.verify = False
+        self.client.auth = (self.__username, self.__password)
 
-    def get(self, *args, **kwargs) -> object:
+        retries = retries = Retry(
+            total=5,
+            backoff_factor=1,
+            status_forcelist=[408, 500]
+        )
+        # Builtin retry mechanism
+        self.client.mount('https://', HTTPAdapter(max_retries=retries))
+        self.client.mount('http://', HTTPAdapter(max_retries=retries))
+
+    def __timeout_response(self):
+        """Make a response object for requests that timeout.
+
+        """
+        empty_response = Response()
+        empty_response.status_code = 408
+        empty_response._content = b''
+
+        return empty_response
+
+    def get(self, url, **kwargs) -> object:
         """Perform a GET request.
 
         Convenience wrapper for redfish.redfish_client.get that handles
@@ -59,13 +84,24 @@ class RedFish:
         Returns:
             returns a rest request with method 'Get'
         """
-        res = self.client.get(*args, **kwargs)
 
-        # The session probably timed out. Need to re-authenticate.
-        if res.status == 401:
-            self.__auth()
-            # Try the request again
-            res = self.client.get(*args, **kwargs)
+        url = self.base_url + url
+
+        k = {**kwargs}
+        k['timeout'] = k.get('timeout', 30)
+
+        try:
+            res = self.client.get(url, **k)
+            # The session probably timed out. Need to re-authenticate.
+            if res.status_code == 401:
+                self.__auth()
+                # Try the request again
+                res = self.client.get(url, **k)
+
+        except requests.exceptions.ReadTimeout:
+            # Timeout waiting for a response. Return an appropriate
+            # response and move on to avoid breaking on edge-cases.
+            res = self.__timeout_response()
 
         return res
 
@@ -81,14 +117,14 @@ class RedFish:
         res = self.client.patch(*args, **kwargs)
 
         # The session probably timed out. Need to re-authenticate.
-        if res.status == 401:
+        if res.status_code == 401:
             self.__auth()
             # Try the request again
             res = self.client.patch(*args, **kwargs)
 
         return res
 
-    def post(self, *args, **kwargs) -> object:
+    def post(self, url, **kwargs) -> object:
         """Perform a POST request.
 
         Convenience wrapper for redfish.redfish_client.post that handles
@@ -97,13 +133,14 @@ class RedFish:
         Returns:
             returns a rest request with method 'Post'
         """
-        res = self.client.post(*args, **kwargs)
+        url = self.base_url + url
+        res = self.client.post(url, **kwargs)
 
         # The session probably timed out. Need to re-authenticate.
-        if res.status == 401:
+        if res.status_code == 401:
             self.__auth()
             # Try the request again
-            res = self.client.post(*args, **kwargs)
+            res = self.client.post(url, **kwargs)
 
         return res
 
@@ -119,7 +156,7 @@ class RedFish:
         res = self.client.put(*args, **kwargs)
 
         # The session probably timed out. Need to re-authenticate.
-        if res.status == 401:
+        if res.status_code == 401:
             self.__auth()
             # Try the request again
             res = self.client.put(*args, **kwargs)
@@ -135,8 +172,8 @@ class RedFish:
         systems = []
         uri = f'{self.prefix}/Systems?$expand=.'
         response = self.get(uri)
-        for i in response.dict.get('Members', []):
-            system_id = i.get('Id')
+        for i in response.json().get('Members', []):
+            system_id = i.get('Id') or i.get('@odata.id')
             if system_id:
                 systems.append(system_id)
 
@@ -151,7 +188,7 @@ class RedFish:
         chassis = []
         uri = f'{self.prefix}/Chassis?$expand=.'
         response = self.get(uri)
-        for i in response.dict.get('Members', []):
+        for i in response.json().get('Members', []):
             chassis_id = i.get('Name')
             if chassis_id:
                 chassis.append(chassis_id)
@@ -171,7 +208,7 @@ class RedFish:
         uri = f'{self.prefix}/Systems/{system}/ResetActionInfo'
         response = self.get(uri)
 
-        for i in response.dict.get('Parameters', []):
+        for i in response.json().get('Parameters', []):
             # Extra condition to make sure we are actually getting
             # the data we think we're getting. Don't trust anything.
             if i.get('Name') == 'ResetType':
@@ -194,120 +231,30 @@ class RedFish:
         uri = f'{self.prefix}/Systems/{system}/Actions/ComputerSystem.Reset'
         body = {"ResetType": reset_type}
 
-        response = self.post(uri, body=body)
-        info = response.dict.get('@Message.ExtendedInfo', [])
+        response = self.post(uri, json=body)
 
-        for i in info:
-            if 'success' in i.get('MessageId', "").lower():
-                return True
+        status = False
+        if response.status_code == 204:
+            # Assuming the 204 status indicates success.
+            status = True
+        else:
+            info = response.json().get('@Message.ExtendedInfo', [])
+            for i in info:
+                if 'success' in i.get('MessageId', "").lower():
+                    status = True
+                    break
 
-        return False
+        return status
 
-    def get_boot_options(self, system: str) -> list:
-        """Gets the system boot menu options.
-
-        Not to be confused with get_boot_order() which only returns
-        the current boot order.
-
-        Args:
-            system: System string of redfish member.
-
-        Returns:
-            List of tuples containing the id and name of each boot
-            option respectively.
-        """
-        boot_options = []
-        uri = f'{self.prefix}/Systems/{system}/BootOptions'
-
-        response = self.get(uri)
-
-        members = response.dict.get('Members', [])
-
-        for i in members:
-            # Every boot option has a uri with extra info.
-            uri = i.get('@odata.id')
-            # Make a new request to get the name and id.
-            r = self.get(uri)
-
-            boot_id = r.dict.get('Id', '')
-            boot_name = r.dict.get('DisplayName', '')
-
-            # Append the id and name as a tuple.
-            # Most applications probably only care for these 2 anyway
-            boot_options.append((boot_id, boot_name))
-
-        return boot_options
-
-    def get_boot_order(self, system: str) -> list:
-        """Gets the system menu boot order.
-
-        Not to be confused with get_boot_options() which returns all
-        available boot menu option. The order may not match the actual
-        boot order.
-
-        This is often useful, in combination with get_boot_options(),
-        for setting a specific boot order.
-
-        Args:
-            system: System string of redfish member.
-
-        Returns:
-            List of boot option id corresponding to the system boot
-            priority.
-        """
-        uri = f'{self.prefix}/Systems/{system}'
-
-        response = self.get(uri)
-
-        boot = response.dict.get('Boot', {})
-        boot_order = boot.get('BootOrder', [])
-
-        return boot_order
-
-    def set_boot_order(self, system: str, order: list) -> bool:
-        """Set the system boot order.
-
-        https://docs.nvidia.com/networking/display/bluefieldbmcv2309/boot+order+configuration
-
-        Args:
-            system: System string of redfish member.
-            order: List of boot options. These can be determined by
-                get_boot_order()
-
-        Returns:
-            A boolean indicating whether or not the boot order change
-                was set, as determined by checking pending settings.
-                The pending boot order should match the provided order.
-
-        """
-        uri = f'{self.prefix}/Systems/{system}/Settings'
-        body = {'Boot': {'BootOrder': [*order]}}
-
-        # 204 (no content) is expected so no need to check response
-        self.patch(uri, body=body)
-
-        # Check that the order is properly set.
-        response = self.get(uri)
-
-        boot = response.dict.get('Boot', {})
-        pending_order = boot.get('BootOrder', [])
-
-        if pending_order == order:
-            return True
-
-        return False
 
     def update_bios(self, path: str) -> bool:
-        """Update bios over redfish.
-
-        This may be used to update other firmware.
-        https://developer.dell.com/apis/2978/versions/7.xx/docs/Tasks/1MultipartUpdates.md
+        """Flash bios over redfish.
 
         After uploading the file for flash, will wait for
         the task to complete.
 
         Args:
-            path: File path to upload.
+            path: File path to upload
 
         Returns:
             Boolean indicating whether or not the flash succeeded.
@@ -318,8 +265,7 @@ class RedFish:
         # to update.
         chassis = None
         res = self.get(f'{self.prefix}/Chassis?$expand=.')
-        for i in res.dict.get('Members', []):
-            # TODO: Is this always true? Multiple Zones?
+        for i in res.json().get('Members', []):
             if i.get('ChassisType', '') == 'Zone':
                 chassis = i.get('Id')
                 break
@@ -330,21 +276,22 @@ class RedFish:
             pass
         else:
             parameters = {
-                    'Targets': [f"{self.prefix}/Chassis/{chassis}"],
-                    "ForceUpdate": True,
+                'Targets': [f"{self.prefix}/Chassis/{chassis}"],
+                "ForceUpdate": True,
             }
-            files = {
-                "UpdateParameters": (
-                    None,
-                    json.dumps(parameters),
-                    'application/json'
-                ),
-                "UpdateFile": (
-                    os.path.basename(path),
-                    open(path, 'rb'),
-                    "application/octet-stream"
-                ),
-            }
+            with open(path, 'rb') as f:
+                files = {
+                    "UpdateParameters": (
+                        None,
+                        json.dumps(parameters),
+                        'application/json'
+                    ),
+                    "UpdateFile": (
+                        os.path.basename(path),
+                        f,
+                        "application/octet-stream"
+                    ),
+                }
             res = requests.post(
                 f'https://{self.__hostname}{uri}',
                 files=files,
@@ -354,21 +301,85 @@ class RedFish:
             # Expects a response with the 'TaskState' of 'Running'
             # otherwise we don't step into the loop.
             res.dict = json.loads(res.text)
-            task_id = res.dict.get('Id')
+            task_id = res.json().get('Id')
             task_uri = f"{self.prefix}/TaskService/Tasks/{task_id}"
             while all([
-                res.dict.get('PercentComplete', 0) < 100,
-                res.dict.get('TaskState', '').lower() == 'running',
+                res.json().get('PercentComplete', 0) < 100,
+                res.json().get('TaskState', '').lower() == 'running',
             ]):
                 # The task is not done so we'll wait and check on it.
                 time.sleep(30)
                 res = self.get(task_uri)
 
             if all([
-                res.dict.get('PercentComplete', 0) == 100,
-                res.dict.get('TaskState', '').lower() == 'completed',
-                res.dict.get('TaskStatus', '').lower() == 'ok',
+                res.json().get('PercentComplete', 0) == 100,
+                res.json().get('TaskState', '').lower() == 'completed',
+                res.json().get('TaskStatus', '').lower() == 'ok',
             ]):
                 return True
 
         return False
+
+    def clear_post_codes(self, system: str) -> bool:
+        """Clears the system post code service logs.
+
+        Args:
+            system: System string of redfish member.
+
+        Returns:
+            Boolean indicating whether or not the logs were cleared
+            as indicated by the response.
+        """
+        uri = f'{self.prefix}/Systems/{system}/' + \
+            'LogServices/PostCodes/Actions/LogService.ClearLog'
+
+        response = self.post(uri)
+
+        status = False
+        if response.status_code == 204:
+            # Assuming the 204 status indicates success.
+            status = True
+        else:
+            info = response.json().get('@Message.ExtendedInfo', [])
+            for i in info:
+                if 'success' in i.get('MessageId', "").lower():
+                    status = True
+                    break
+
+        return status
+
+    def get_post_codes(self, system: str) -> list:
+        """Gets a list of post codes from the post code service logs.
+
+        Args:
+            system: System string of Redfish member.
+
+        Returns:
+            List of post codes from the system service log.
+        """
+        uri = f'{self.prefix}/Systems/{system}/LogServices/PostCodes/' + \
+            'Entries'
+
+        response = self.get(uri)
+
+        post_codes = []
+        if response.status_code == 200:
+            entry_list = response.json().get("Members", [])
+        elif response.status_code == 204:
+            entry_list = []
+        else:
+            # No content which might not contain JSON.
+            entry_list = []
+            post_codes = None
+
+        # Compile for performance.
+        code_match = re.compile(r'POST Code[:\s]+(\w+)\b')
+        for i in entry_list:
+            message = i.get('Message')
+            code = re.findall(code_match, message)
+            code = code and code[0] or None
+
+            if code is not None:
+                post_codes.append(code)
+
+        return post_codes
