@@ -20,9 +20,8 @@ WSL setup guide for new installations.
 
 ## Installing WSL2
 
-1. Start Menu > "Turn Windows features on or off"  
-  > Windows Subsystem for Linux  
-  ![](img/enable-wsl.png)
+1. Start Menu > "Turn Windows features on or off" > Windows Subsystem for Linux  
+   ![](img/enable-wsl.png)
     - You'll be prompted to restart to update. Complete before continuing.
 2. `wsl --install`
 3. `wsl -l -v`
@@ -37,7 +36,7 @@ WSL setup guide for new installations.
 Custom WSL installations can be made by simply importing a `.tar` file  
 containing the root filesystem of your target distribution. Many custom  
 distribution can be installed this way by using a virtual machine to  
-create the `.tar` archive of a newly installed Linux distribution.
+create the `.tar` archive of a newly installed Linux distribution.  
 
 Other distros such as Gentoo and Void Linux provide initial rootfs or  
 stage files officially. In this example, Gentoo Linux will be used  
@@ -54,12 +53,10 @@ to demonstrate installing a custom distro
       (Automated Weekly Release Key)" key from the [Signatures page](https://www.gentoo.org/downloads/signatures/).
     - If you're in a Linux environment now, fetch the key and verify  
       the `.sha256` file with `gpg --verify *.sha256`.
-    - For new installs, verifying the hash is usually sufficient and the
+    - For new installs, verifying the hash is usually sufficient and the  
       signature can be verified after installing.
 3. Get the SHA256 hash of the downloaded tarball and compare with the  
    hash inside the `.sha256` file to verify the file integrity. These  
    should match.
     - Windows: `Get-FileHash -A sha256 *tar.xz`.
     - Linux: `sha256sum *tar.xz`.
-
-
