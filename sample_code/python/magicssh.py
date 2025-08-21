@@ -1,6 +1,8 @@
+import os
 import posixpath
 import stat
 import time
+
 from fabric import Connection, Config
 from invoke.exceptions import UnexpectedExit
 import paramiko
@@ -64,7 +66,18 @@ class MagicSSH:
         self.channel = None
         self.tunnels = []
 
-        if password:
+        if pkey:
+            self.client = Connection(
+                host=host,
+                user=user,
+                port=port,
+                connect_kwargs={
+                    "key_filename": pkey,
+                    "look_for_keys": False,
+                },
+                config=self.__config,
+            )
+        elif password:
             self.__config = Config(
                 overrides={'sudo': {'password': self.__password}}
             )
@@ -74,17 +87,6 @@ class MagicSSH:
                 port=port,
                 connect_kwargs={
                     "password": password,
-                },
-                config=self.__config,
-            )
-        elif pkey:
-            self.client = Connection(
-                host=host,
-                user=user,
-                port=port,
-                connect_kwargs={
-                    "key_filename": pkey,
-                    "look_for_keys": False,
                 },
                 config=self.__config,
             )
@@ -130,6 +132,9 @@ class MagicSSH:
             nbytes: Number of bytes to receive from the channel.
             timeout: Number of seconds to block for channel to receive
                 data. If None, channel is non-blocking.
+
+        Returns:
+            Response bytes.
         """
         res = None
         if not self.channel:
@@ -200,6 +205,11 @@ class MagicSSH:
             local: File path or file-like object.
             remote: Destination path. This will use the OS user's home if None.
         """
+        sftp = self.client.sftp()
+        # Convert remote path to posix for non-standard platforms.
+        # Related bug: https://github.com/fabric/fabric/issues/2335
+        remote = remote and sftp.normalize(remote)
+
         self.client.put(local=local, remote=remote)
 
     def get(self, remote: str, local: str = None) -> None:
@@ -210,6 +220,11 @@ class MagicSSH:
             local: Local file path. This will use the OS user's current
                 working directory if None.
         """
+        sftp = self.client.sftp()
+        # Convert remote path to posix for non-standard platforms.
+        # Related bug: https://github.com/fabric/fabric/issues/2335
+        remote = remote and sftp.normalize(remote)
+
         self.client.get(remote=remote, local=local)
 
     def run(self, cmd: str) -> tuple:
@@ -217,7 +232,7 @@ class MagicSSH:
 
         Fabric uses a setting in the SSH layer which merges both
         stderr and stdout streams at a low level to cause output to
-        appear more naturally at the cost of an empty stderr attribute.
+        appear more naturally at the cost of an empty .stderr attribute.
 
         https://docs.fabfile.org/en/1.11/usage/interactivity.html
 
@@ -258,7 +273,7 @@ class MagicSSH:
         return result
 
     def sudo(self, cmd: str) -> tuple:
-        """Execute a shell command, via ``sudo``, on the remote end.
+        """Execute a shell command, via `sudo`, on the remote end.
 
         Simple wrapper for fabric.Connection.sudo()
 
@@ -290,6 +305,8 @@ class MagicSSH:
         Due to a lack of success with Fabric's forward_local() method,
         this method uses similar naming but wraps sshtunnel instead.
 
+        Related bug: https://github.com/fabric/fabric/issues/2102
+
         Args:
             local_port: Local port to forward.
             remote_port: Remote port to bind to.
@@ -301,7 +318,6 @@ class MagicSSH:
 
         """
         try:
-            # Close any existing tunnels.
             self.tunnels.append(
                 sshtunnel.open_tunnel(
                     (self.__host, self.__port),
@@ -324,7 +340,7 @@ class MagicSSH:
 
         Returns:
             Boolean indicating whether the tunneled SSH server
-                is up.
+            is up.
 
         """
         if not self.tunnels:
@@ -376,18 +392,53 @@ class MagicSSH:
             ):
                 yield i
 
-    def sftp_file_exists(self, remote_path: str) -> bool:
-        """Check if a file exists on the remote system using SFTP.
+    def sftp_path_exists(self, remote: str) -> bool:
+        """Check if a path exists on the remote system using SFTP.
 
         Args:
-            remote_path: Path to the file on the remote system.
+            remote: Path to test on the remote system.
 
         Returns:
             True if the file exists, False otherwise.
         """
         try:
             sftp = self.client.sftp()
-            sftp.stat(remote_path)
+            sftp.stat(remote)
             return True
         except FileNotFoundError:
             return False
+
+    def sftp_makedirs(self, remote: str) -> None:
+        """Recursively make directories on the remote system using SFTP.
+
+        This will safely create any sub-directories, even if their
+        parents do not exist.
+
+        Args:
+            remote: Directories on the remote system.
+
+        Returns:
+            None
+        """
+        sftp = self.client.sftp()
+        remote = sftp.normalize(remote)
+
+        dir_list = []
+
+        # Recurse up the directory tree until we find an existing parent.
+        while not self.sftp_path_exists(remote):
+            # Save the child dir for later.
+            dir_list.append(os.path.basename(remote))
+            remote = os.path.dirname(remote)
+
+        # Order is backwards so reverse it to match the order provided.
+        dir_list.reverse()
+
+        for i in dir_list:
+            # Path is posix so we expect forward path separators.
+            # os.path.join() can work here too but will change depending
+            # on host OS.
+            remote += f'/{i}'
+            # Normalize the path to ensure it is correctly formatted.
+            remote = sftp.normalize(remote)
+            sftp.mkdir(remote)
