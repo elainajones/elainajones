@@ -1,0 +1,34 @@
+############################################
+# Python
+############################################
+# Python temp files
+*__pycache__/
+*.pyc
+# Conventional naming for Python virtual environments
+venv
+.venv
+# RobotFramework files
+output.xml
+report.html
+log.html
+# Coverage temp files
+.coverage
+# Pyinstaller build files
+dist/
+build/
+*.exe
+*.spec
+
+############################################
+# IDE files
+############################################
+# Visual Studio
+.vs/
+# JetBrains (PyCharm)
+.idea
+# VIM swap file
+*.swp
+# Windows swap file (Excel)
+# These files can break WSL git since they become
+# impossible to remove if they show up unless ignored
+*~
