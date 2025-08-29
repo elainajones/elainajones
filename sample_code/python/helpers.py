@@ -1,6 +1,12 @@
+import inspect
+import logging
 import socket
 import subprocess
+import sys
 import time
+
+logger = logging.getLogger(__name__)
+
 
 def is_float(s: str) -> bool:
     """Checks if a given string is a float.
@@ -114,3 +120,123 @@ def is_host_reachable(host: str, port: int, timeout: int = 3) -> bool:
     except socket.error:
         # Could not connect. Host may be down.
         return False
+
+
+def retry(n: int = 1) -> object:
+    """Wraps functions with retries on Exception.
+
+    This is a decorator that takes an argument.
+
+    Can be used as a function decorator using @retry syntax.
+
+    Args:
+        n: Number of retries to perform.
+
+    Returns:
+        Decorator with wrapped function.
+    """
+    dec_name = inspect.currentframe().f_code.co_name
+
+    def decorator(func) -> object:
+        def wrapper(*args, **kwargs):
+            retries = n
+            while retries > 0:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    exception = e
+                    tb = sys.exc_info()[2]
+
+                time.sleep(60)
+                retries -= 1
+
+            e = exception
+            msg = '\n'.join([
+                f'{dec_name} Exception after {n} attempts in '
+                f'{func.__module__}.{func.__name__}',
+                f"Caused by: {type(e).__name__}: {str(e)}",
+            ])
+            raise Exception(msg).with_traceback(tb)
+
+        return wrapper
+    return decorator
+
+
+def blackbox_logger(func: object) -> object:
+    """Function decorator that logs runtime inputs and outputs.
+
+    This decorator provides the boilerplate necessary to perform
+    blackbox code analysis and logging at runtime. This will log
+    function kwargs, duration, return (and type), and safely re-
+    raises any exceptions that occur when calling the wrapped
+    function
+
+    Args:
+        func: The function being wrapped (implied when decorating)
+
+    Returns:
+        The normal function output.
+    """
+    dec_name = inspect.currentframe().f_code.co_name
+
+    def wrapper(*args, **kwargs):
+        func_args = [*args]
+        func_kwargs = {}
+
+        spec = inspect.getfullargspec(func)
+
+        i = 0
+        defaults = spec.defaults and [*spec.defaults] or []
+        for key in spec.args:
+            if len(func_args):
+                # Unpack args. This only works because positional arguments
+                # must precede keyword arguments.
+                val = func_args.pop(0)
+                func_kwargs[key] = val
+            elif all([
+                len(defaults),
+                len(spec.args[spec.args.index(key):]) <= len(defaults)
+            ]):
+                # Unpack defaults. Defaults are a tuple (immutable).
+                # This only works because parameters with defaults must follow
+                # parameters without defaults.
+                func_kwargs[key] = defaults[i]
+                i += 1
+
+        # Resolve discrepancies between args, defaults, and kwargs.
+        func_kwargs = {**func_kwargs, **kwargs}
+
+        start = time.time()
+        tb = ''
+        exception = None
+        try:
+            # Run wrapped function.
+            ret = func(**func_kwargs)
+        except Exception as e:
+            exception = e
+            tb = sys.exc_info()[2]
+
+        dur = round(time.time() - start, 4)
+
+        # Search for 'Hello blackbox' in the logs.
+        logger.info(
+            f'Hello {dec_name} from {func.__module__}.{func.__name__}'
+        )
+        logger.info(f'kwargs: {func_kwargs}')
+        logger.info(f'duration: {dur}')
+
+        if exception:
+            e = exception
+            msg = '\n'.join([
+                f"{dec_name} Exception: {e}",
+                f"Caused by: {type(e).__name__}: {str(e)}",
+            ])
+            logger.error(f'EXCEPTION: {e}')
+
+            raise Exception(msg).with_traceback(tb)
+
+        logger.info(f'return {type(ret)}: {ret}')
+
+        return ret
+
+    return wrapper
